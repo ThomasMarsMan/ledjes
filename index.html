@@ -1,21 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
 <head>
+    <meta charset="UTF-8">
     <title>DeckForge LED Control</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #121212; color: white; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px; margin: auto; }
-        button { padding: 15px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; }
-        .blue { background: #007bff; color: white; }
-        .red { background: #dc3545; color: white; }
-        .off { background: #444; color: white; }
-        .blink { background: #ffc107; color: black; }
-        .connect { background: #28a745; width: 100%; margin-bottom: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #0f172a; color: white; padding-top: 50px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 400px; margin: auto; }
+        button { padding: 15px; font-size: 14px; font-weight: bold; cursor: pointer; border-radius: 10px; border: none; transition: 0.3s; }
+        
+        /* Status Kleuren */
+        .connect { background: #3b82f6; width: 100%; margin-bottom: 20px; text-transform: uppercase; }
+        .connected { background: #22c55e !important; } /* Fel groen als verbonden */
+        
+        .blue { background: #2563eb; color: white; }
+        .red { background: #dc2626; color: white; }
+        .off { background: #334155; color: white; }
+        .blink { background: #f59e0b; color: black; }
+        button:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
-    <h1>DeckForge LED</h1>
-    <button class="connect" onclick="connectBT()">1. Verbind met ESP32</button>
+
+    <h1>DeckForge Controller</h1>
+    
+    <button id="statusBtn" class="connect" onclick="connectBT()">Klik om te verbinden</button>
     
     <div class="grid">
         <button class="blue" onclick="send('B_ON')">Blauw AAN</button>
@@ -28,21 +36,44 @@
 
     <script>
         let btChar;
+        let bluetoothDevice;
+
         async function connectBT() {
-            const device = await navigator.bluetooth.requestDevice({
-                filters: [{ name: 'DeckForge' }],
-                optionalServices: ['12345678-1234-1234-1234-123456789abc']
-            });
-            const server = await device.gatt.connect();
-            const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
-            btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
-            alert("Verbonden!");
+            const btn = document.getElementById('statusBtn');
+            try {
+                btn.innerText = "Zoeken...";
+                
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'DeckForge' }],
+                    optionalServices: ['12345678-1234-1234-1234-123456789abc']
+                });
+
+                const server = await bluetoothDevice.gatt.connect();
+                const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
+                btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
+
+                // Als we hier komen, is het gelukt!
+                btn.innerText = "VERBONDEN ✅";
+                btn.classList.add('connected');
+                
+                // Luister of de verbinding verbreekt
+                bluetoothDevice.addEventListener('gattserverdisconnected', () => {
+                    btn.innerText = "VERBINDING VERBROKEN ❌";
+                    btn.classList.remove('connected');
+                });
+
+            } catch (error) {
+                console.log(error);
+                btn.innerText = "FOUT: PROBEER OPNIEUW";
+            }
         }
 
         async function send(msg) {
             if (btChar) {
                 const enc = new TextEncoder().encode(msg);
                 await btChar.writeValue(enc);
+            } else {
+                alert("Verbind eerst met de ESP32!");
             }
         }
     </script>
