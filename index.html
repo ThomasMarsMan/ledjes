@@ -2,27 +2,31 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>DeckForge Pro Controller</title>
+    <title>DeckForge System Control</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 30px; }
-        .container { max-width: 450px; margin: auto; background: #1e293b; padding: 25px; border-radius: 20px; }
-        #status { font-weight: bold; color: #3b82f6; margin-bottom: 20px; }
-        .mode-display { font-size: 24px; color: #f59e0b; margin: 20px 0; border: 2px solid #444; padding: 10px; }
+        /* Helderheid overlay */
+        #brightnessOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: black; opacity: 0; pointer-events: none; z-index: 9999;
+        }
+        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; transition: 0.2s; }
+        .container { max-width: 400px; margin: 100px auto; background: #1e293b; padding: 30px; border-radius: 20px; }
+        .stat { font-size: 32px; color: #f59e0b; margin: 20px 0; }
     </style>
 </head>
 <body>
+    <div id="brightnessOverlay"></div>
     <div class="container">
-        <h2>DeckForge Pro</h2>
-        <div id="status">Status: Losgekoppeld</div>
-        <button onclick="connectBT()" id="btn" style="padding:10px; border-radius:10px; cursor:pointer;">VERBINDEN</button>
-        
-        <div class="mode-display" id="mode">Menu: Tijd</div>
-        <div id="valDisplay">Waarde: 0%</div>
+        <h2>DeckForge Control</h2>
+        <button id="btn" onclick="connectBT()" style="padding:15px; border-radius:10px;">VERBINDEN</button>
+        <div id="modeDisplay" class="stat">Menu: Tijd</div>
+        <div id="valDisplay" style="font-size: 20px;">Waarde: 0%</div>
+        <p><i>Houd dit tabblad open om je apparaat te besturen.</i></p>
     </div>
 
     <script>
         let btChar;
-
+        
         async function connectBT() {
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ name: 'DeckForge' }],
@@ -32,33 +36,38 @@
             const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
             btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
             
-            document.getElementById('status').innerText = "Status: Verbonden ✅";
-            
-            // Start tijd-sync naar ESP
+            document.getElementById('btn').innerText = "VERBONDEN ✅";
+
+            // Sync tijd naar ESP
             setInterval(() => {
-                const nu = new Date();
-                const msg = "T:" + nu.toLocaleDateString() + " " + nu.toLocaleTimeString();
-                btChar.writeValue(new TextEncoder().encode(msg));
+                const n = new Date();
+                btChar.writeValue(new TextEncoder().encode("T:"+n.toLocaleDateString()+" "+n.toLocaleTimeString()));
             }, 1000);
 
-            // Ontvang data VAN de ESP (Potentiometer standen)
+            // Luister naar de Potentiometer
             await btChar.startNotifications();
-            btChar.addEventListener('characteristicvaluechanged', (event) => {
-                let str = new TextDecoder().decode(event.target.value);
-                handleESPData(str);
+            btChar.addEventListener('characteristicvaluechanged', (e) => {
+                let msg = new TextDecoder().decode(e.target.value);
+                let [type, val] = msg.split(':');
+                updateSystem(type, parseInt(val));
             });
         }
 
-        function handleESPData(data) {
-            // Data komt binnen als bijv "VOL:50" of "BRIGHT:80"
-            const [type, val] = data.split(':');
-            document.getElementById('mode').innerText = "Modus: " + type;
-            document.getElementById('valDisplay').innerText = "Waarde: " + val + "%";
+        function updateSystem(type, val) {
+            document.getElementById('modeDisplay').innerText = type;
+            document.getElementById('valDisplay').innerText = val + "%";
 
-            // Let op: echte systeem-volume/helderheid via browser is beperkt 
-            // voor echte controle heb je vaak een extra appje nodig, 
-            // maar we tonen hier dat de data binnenkomt!
-            console.log("ESP stuurt actie:", type, val);
+            if (type === "VOLUME") {
+                // We kunnen niet het systeemvolume van Windows regelen, 
+                // maar wel de media in je browser.
+                const audioElements = document.querySelectorAll('video, audio');
+                audioElements.forEach(el => el.volume = val / 100);
+            } 
+            else if (type === "BRIGHT") {
+                // Simuleer helderheid door het scherm donkerder te maken
+                const opacity = (100 - val) / 100;
+                document.getElementById('brightnessOverlay').style.opacity = opacity * 0.8;
+            }
         }
     </script>
 </body>
