@@ -2,54 +2,28 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>DeckForge Controller + OLED</title>
+    <title>DeckForge Pro Controller</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; }
-        .container { max-width: 450px; margin: auto; background: #1e293b; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        
-        button { padding: 12px; font-size: 14px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; transition: 0.2s; }
-        .connect-btn { background: #3b82f6; width: 100%; margin-bottom: 20px; color: white; text-transform: uppercase; }
-        .connected { background: #22c55e !important; }
-        
-        .oled-box { margin-bottom: 25px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 12px; border-radius: 8px; border: none; outline: none; }
-        .send-btn { background: #a259ff; color: white; }
-
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .blue { background: #2563eb; color: white; }
-        .red { background: #dc2626; color: white; }
-        .blink { background: #f59e0b; color: black; }
-        .off { background: #475569; color: white; }
-        button:active { transform: scale(0.96); }
+        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding: 30px; }
+        .container { max-width: 450px; margin: auto; background: #1e293b; padding: 25px; border-radius: 20px; }
+        #status { font-weight: bold; color: #3b82f6; margin-bottom: 20px; }
+        .mode-display { font-size: 24px; color: #f59e0b; margin: 20px 0; border: 2px solid #444; padding: 10px; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>DeckForge Control</h2>
-    
-    <button id="statusBtn" class="connect-btn" onclick="connectBT()">Verbind met ESP32-S3</button>
-
-    <div class="oled-box">
-        <input type="text" id="oledText" placeholder="Bericht voor scherm..." maxlength="16">
-        <button class="send-btn" onclick="sendToOled()">STUUR</button>
+    <div class="container">
+        <h2>DeckForge Pro</h2>
+        <div id="status">Status: Losgekoppeld</div>
+        <button onclick="connectBT()" id="btn" style="padding:10px; border-radius:10px; cursor:pointer;">VERBINDEN</button>
+        
+        <div class="mode-display" id="mode">Menu: Tijd</div>
+        <div id="valDisplay">Waarde: 0%</div>
     </div>
 
-    <div class="grid">
-        <button class="blue" onclick="send('B_ON')">Blauw AAN</button>
-        <button class="off" onclick="send('B_OFF')">Blauw UIT</button>
-        <button class="red" onclick="send('R_ON')">Rood AAN</button>
-        <button class="off" onclick="send('R_OFF')">Rood UIT</button>
-        <button class="blink" onclick="send('BLINK')">Knipperen</button>
-        <button class="off" onclick="send('ALL_OFF')">Alles UIT</button>
-    </div>
-</div>
+    <script>
+        let btChar;
 
-<script>
-    let btChar;
-    async function connectBT() {
-        const btn = document.getElementById('statusBtn');
-        try {
+        async function connectBT() {
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ name: 'DeckForge' }],
                 optionalServices: ['12345678-1234-1234-1234-123456789abc']
@@ -58,23 +32,34 @@
             const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
             btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
             
-            btn.innerText = "VERBONDEN ✅";
-            btn.classList.add('connected');
-        } catch (e) { btn.innerText = "FOUT: PROBEER OPNIEUW"; }
-    }
+            document.getElementById('status').innerText = "Status: Verbonden ✅";
+            
+            // Start tijd-sync naar ESP
+            setInterval(() => {
+                const nu = new Date();
+                const msg = "T:" + nu.toLocaleDateString() + " " + nu.toLocaleTimeString();
+                btChar.writeValue(new TextEncoder().encode(msg));
+            }, 1000);
 
-    async function send(msg) {
-        if (btChar) {
-            await btChar.writeValue(new TextEncoder().encode(msg));
+            // Ontvang data VAN de ESP (Potentiometer standen)
+            await btChar.startNotifications();
+            btChar.addEventListener('characteristicvaluechanged', (event) => {
+                let str = new TextDecoder().decode(event.target.value);
+                handleESPData(str);
+            });
         }
-    }
 
-    async function sendToOled() {
-        const val = document.getElementById('oledText').value;
-        if (btChar && val) {
-            await btChar.writeValue(new TextEncoder().encode("O:" + val));
+        function handleESPData(data) {
+            // Data komt binnen als bijv "VOL:50" of "BRIGHT:80"
+            const [type, val] = data.split(':');
+            document.getElementById('mode').innerText = "Modus: " + type;
+            document.getElementById('valDisplay').innerText = "Waarde: " + val + "%";
+
+            // Let op: echte systeem-volume/helderheid via browser is beperkt 
+            // voor echte controle heb je vaak een extra appje nodig, 
+            // maar we tonen hier dat de data binnenkomt!
+            console.log("ESP stuurt actie:", type, val);
         }
-    }
-</script>
+    </script>
 </body>
 </html>
