@@ -1,37 +1,41 @@
 <!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <title>DeckForge Time Sync</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; background: #0f172a; color: white; padding-top: 100px; }
-        .box { background: #1e293b; padding: 40px; border-radius: 20px; display: inline-block; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 10px; border: none; background: #3b82f6; color: white; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h2>Time Sync Tool</h2>
-        <p>Verbind om de tijd op je OLED te zetten.</p>
-        <button onclick="syncTime()">VERBIND & SYNC</button>
-        <p id="status" style="color: #64748b; margin-top: 20px;">Niet verbonden</p>
-    </div>
+<html>
+<body style="background:#0f172a; color:white; text-align:center; font-family:sans-serif;">
+    <h2>DeckForge Remote</h2>
+    <button id="btn" onclick="connect()" style="padding:20px; border-radius:10px;">VERBIND MET ESP32</button>
+    <h1 id="vol">Volume: 0%</h1>
+    <video id="player" controls loop width="300" src="https://www.w3schools.com/html/mov_bbb.mp4"></video>
+    <p>Draai aan de knop om de video hierboven zachter/harder te zetten.</p>
 
     <script>
-        async function syncTime() {
-            try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'DeckForge' }],
-                    optionalServices: ['00001800-0000-1000-8000-00805f9b34fb'] // Standaard services
-                });
-                document.getElementById('status').innerText = "Gesynchroniseerd! ✅";
-                
-                // OPMERKING: De tijd-sync loopt via BLE, 
-                // maar het volume gaat via de Keyboard-HID mode van de ESP.
-            } catch (e) { console.log(e); }
+        let char;
+        async function connect() {
+            const dev = await navigator.bluetooth.requestDevice({
+                filters: [{name: 'DeckForge_Controller'}],
+                optionalServices: ['12345678-1234-1234-1234-123456789abc']
+            });
+            const server = await dev.gatt.connect();
+            const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
+            char = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
+            
+            document.getElementById('btn').innerText = "VERBONDEN ✅";
+
+            // Sync tijd
+            const n = new Date();
+            const tMsg = "T:" + n.toLocaleDateString('nl-NL') + " " + n.toLocaleTimeString('nl-NL').substring(0,5);
+            await char.writeValue(new TextEncoder().encode(tMsg));
+
+            // Luister naar volume
+            await char.startNotifications();
+            char.addEventListener('characteristicvaluechanged', (e) => {
+                let s = new TextDecoder().decode(e.target.value);
+                if(s.startsWith("V:")) {
+                    let v = s.split(":")[1];
+                    document.getElementById('vol').innerText = "Volume: " + v + "%";
+                    document.getElementById('player').volume = v / 100;
+                }
+            });
         }
     </script>
-</body>
-</html>
 </body>
 </html>
