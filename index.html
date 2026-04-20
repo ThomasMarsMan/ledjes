@@ -2,29 +2,39 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>DeckForge LED Control</title>
+    <title>DeckForge Controller + OLED</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #0f172a; color: white; padding-top: 50px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 400px; margin: auto; }
-        button { padding: 15px; font-size: 14px; font-weight: bold; cursor: pointer; border-radius: 10px; border: none; transition: 0.3s; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #0f172a; color: white; padding: 20px; }
+        .container { max-width: 450px; margin: auto; background: #1e293b; padding: 25px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         
-        /* Status Kleuren */
-        .connect { background: #3b82f6; width: 100%; margin-bottom: 20px; text-transform: uppercase; }
-        .connected { background: #22c55e !important; } /* Fel groen als verbonden */
+        button { padding: 12px; font-size: 14px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; transition: 0.2s; }
+        .connect-btn { background: #3b82f6; width: 100%; margin-bottom: 20px; color: white; text-transform: uppercase; }
+        .connected { background: #22c55e !important; }
         
+        .oled-box { margin-bottom: 25px; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border-radius: 8px; border: none; outline: none; }
+        .send-btn { background: #a259ff; color: white; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .blue { background: #2563eb; color: white; }
         .red { background: #dc2626; color: white; }
-        .off { background: #334155; color: white; }
         .blink { background: #f59e0b; color: black; }
-        button:active { transform: scale(0.95); }
+        .off { background: #475569; color: white; }
+        button:active { transform: scale(0.96); }
     </style>
 </head>
 <body>
 
-    <h1>DeckForge Controller</h1>
+<div class="container">
+    <h2>DeckForge Control</h2>
     
-    <button id="statusBtn" class="connect" onclick="connectBT()">Klik om te verbinden</button>
-    
+    <button id="statusBtn" class="connect-btn" onclick="connectBT()">Verbind met ESP32-S3</button>
+
+    <div class="oled-box">
+        <input type="text" id="oledText" placeholder="Bericht voor scherm..." maxlength="16">
+        <button class="send-btn" onclick="sendToOled()">STUUR</button>
+    </div>
+
     <div class="grid">
         <button class="blue" onclick="send('B_ON')">Blauw AAN</button>
         <button class="off" onclick="send('B_OFF')">Blauw UIT</button>
@@ -33,49 +43,38 @@
         <button class="blink" onclick="send('BLINK')">Knipperen</button>
         <button class="off" onclick="send('ALL_OFF')">Alles UIT</button>
     </div>
+</div>
 
-    <script>
-        let btChar;
-        let bluetoothDevice;
+<script>
+    let btChar;
+    async function connectBT() {
+        const btn = document.getElementById('statusBtn');
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'DeckForge' }],
+                optionalServices: ['12345678-1234-1234-1234-123456789abc']
+            });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
+            btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
+            
+            btn.innerText = "VERBONDEN ✅";
+            btn.classList.add('connected');
+        } catch (e) { btn.innerText = "FOUT: PROBEER OPNIEUW"; }
+    }
 
-        async function connectBT() {
-            const btn = document.getElementById('statusBtn');
-            try {
-                btn.innerText = "Zoeken...";
-                
-                bluetoothDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: 'DeckForge' }],
-                    optionalServices: ['12345678-1234-1234-1234-123456789abc']
-                });
-
-                const server = await bluetoothDevice.gatt.connect();
-                const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
-                btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
-
-                // Als we hier komen, is het gelukt!
-                btn.innerText = "VERBONDEN ✅";
-                btn.classList.add('connected');
-                
-                // Luister of de verbinding verbreekt
-                bluetoothDevice.addEventListener('gattserverdisconnected', () => {
-                    btn.innerText = "VERBINDING VERBROKEN ❌";
-                    btn.classList.remove('connected');
-                });
-
-            } catch (error) {
-                console.log(error);
-                btn.innerText = "FOUT: PROBEER OPNIEUW";
-            }
+    async function send(msg) {
+        if (btChar) {
+            await btChar.writeValue(new TextEncoder().encode(msg));
         }
+    }
 
-        async function send(msg) {
-            if (btChar) {
-                const enc = new TextEncoder().encode(msg);
-                await btChar.writeValue(enc);
-            } else {
-                alert("Verbind eerst met de ESP32!");
-            }
+    async function sendToOled() {
+        const val = document.getElementById('oledText').value;
+        if (btChar && val) {
+            await btChar.writeValue(new TextEncoder().encode("O:" + val));
         }
-    </script>
+    }
+</script>
 </body>
 </html>
