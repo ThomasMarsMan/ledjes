@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DeckForge LED Control</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #121212; color: white; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 400px; margin: auto; }
+        button { padding: 15px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; }
+        .blue { background: #007bff; color: white; }
+        .red { background: #dc3545; color: white; }
+        .off { background: #444; color: white; }
+        .blink { background: #ffc107; color: black; }
+        .connect { background: #28a745; width: 100%; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>DeckForge LED</h1>
+    <button class="connect" onclick="connectBT()">1. Verbind met ESP32</button>
+    
+    <div class="grid">
+        <button class="blue" onclick="send('B_ON')">Blauw AAN</button>
+        <button class="off" onclick="send('B_OFF')">Blauw UIT</button>
+        <button class="red" onclick="send('R_ON')">Rood AAN</button>
+        <button class="off" onclick="send('R_OFF')">Rood UIT</button>
+        <button class="blink" onclick="send('BLINK')">Knipperen</button>
+        <button class="off" onclick="send('ALL_OFF')">Alles UIT</button>
+    </div>
+
+    <script>
+        let btChar;
+        async function connectBT() {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'DeckForge' }],
+                optionalServices: ['12345678-1234-1234-1234-123456789abc']
+            });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('12345678-1234-1234-1234-123456789abc');
+            btChar = await service.getCharacteristic('12345678-1234-1234-1234-123456789abd');
+            alert("Verbonden!");
+        }
+
+        async function send(msg) {
+            if (btChar) {
+                const enc = new TextEncoder().encode(msg);
+                await btChar.writeValue(enc);
+            }
+        }
+    </script>
+</body>
+</html>
